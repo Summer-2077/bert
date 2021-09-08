@@ -25,8 +25,8 @@ def create_raw_documents(n):
 
 
 def create_vocab():
-    files = ["./train_set.csv", "./test_a.csv"]
-    my_open = open('./bert_mini/vocab.txt', 'w')
+    files = ["./raw_data/train_set.csv", "./raw_data/test_a.csv"]
+    my_open = open('bert-mini/vocab.txt', 'w')
     word = set()
     for file in files:
         data = pd.read_csv(file, sep='\t')
@@ -40,7 +40,7 @@ def create_vocab():
 
 
 if __name__ == '__main__':
-    create_raw_documents(10)
+    # create_raw_documents(10)
     create_vocab()
 
 

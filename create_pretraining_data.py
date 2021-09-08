@@ -24,7 +24,7 @@ from absl import flags
 from absl import logging
 import tensorflow as tf
 
-from official.nlp.bert import tokenization
+import tokenization
 
 FLAGS = flags.FLAGS
 
@@ -81,121 +81,120 @@ flags.DEFINE_float(
 
 
 class TrainingInstance(object):
-  """A single training instance (sentence pair)."""
+    """A single training instance (sentence pair)."""
 
-  def __init__(self, tokens, segment_ids, masked_lm_positions, masked_lm_labels,
-               is_random_next):
-    self.tokens = tokens
-    self.segment_ids = segment_ids
-    self.is_random_next = is_random_next
-    self.masked_lm_positions = masked_lm_positions
-    self.masked_lm_labels = masked_lm_labels
+    def __init__(self, tokens, segment_ids, masked_lm_positions, masked_lm_labels,
+                 is_random_next):
+        self.tokens = tokens
+        self.segment_ids = segment_ids
+        self.is_random_next = is_random_next
+        self.masked_lm_positions = masked_lm_positions
+        self.masked_lm_labels = masked_lm_labels
 
-  def __str__(self):
-    s = ""
-    s += "tokens: %s\n" % (" ".join(
-        [tokenization.printable_text(x) for x in self.tokens]))
-    s += "segment_ids: %s\n" % (" ".join([str(x) for x in self.segment_ids]))
-    s += "is_random_next: %s\n" % self.is_random_next
-    s += "masked_lm_positions: %s\n" % (" ".join(
-        [str(x) for x in self.masked_lm_positions]))
-    s += "masked_lm_labels: %s\n" % (" ".join(
-        [tokenization.printable_text(x) for x in self.masked_lm_labels]))
-    s += "\n"
-    return s
+    def __str__(self):
+        s = ""
+        s += "tokens: %s\n" % (" ".join(
+            [tokenization.printable_text(x) for x in self.tokens]))
+        s += "segment_ids: %s\n" % (" ".join([str(x) for x in self.segment_ids]))
+        s += "is_random_next: %s\n" % self.is_random_next
+        s += "masked_lm_positions: %s\n" % (" ".join(
+            [str(x) for x in self.masked_lm_positions]))
+        s += "masked_lm_labels: %s\n" % (" ".join(
+            [tokenization.printable_text(x) for x in self.masked_lm_labels]))
+        s += "\n"
+        return s
 
-  def __repr__(self):
-    return self.__str__()
+    def __repr__(self):
+        return self.__str__()
 
 
 def write_instance_to_example_files(instances, tokenizer, max_seq_length,
                                     max_predictions_per_seq, output_files,
                                     gzip_compress, use_v2_feature_names):
-  """Creates TF example files from `TrainingInstance`s."""
-  writers = []
-  for output_file in output_files:
-    writers.append(
-        tf.io.TFRecordWriter(
-            output_file, options="GZIP" if gzip_compress else ""))
+    """Creates TF example files from `TrainingInstance`s."""
+    writers = []
+    for output_file in output_files:
+        print(output_file)
+        writers.append(tf.io.TFRecordWriter(output_file))
 
-  writer_index = 0
+    writer_index = 0
 
-  total_written = 0
-  for (inst_index, instance) in enumerate(instances):
-    input_ids = tokenizer.convert_tokens_to_ids(instance.tokens)
-    input_mask = [1] * len(input_ids)
-    segment_ids = list(instance.segment_ids)
-    assert len(input_ids) <= max_seq_length
+    total_written = 0
+    for (inst_index, instance) in enumerate(instances):
+        input_ids = tokenizer.convert_tokens_to_ids(instance.tokens)
+        input_mask = [1] * len(input_ids)
+        segment_ids = list(instance.segment_ids)
+        assert len(input_ids) <= max_seq_length
 
-    while len(input_ids) < max_seq_length:
-      input_ids.append(0)
-      input_mask.append(0)
-      segment_ids.append(0)
+        while len(input_ids) < max_seq_length:
+            input_ids.append(0)
+            input_mask.append(0)
+            segment_ids.append(0)
 
-    assert len(input_ids) == max_seq_length
-    assert len(input_mask) == max_seq_length
-    assert len(segment_ids) == max_seq_length
+        assert len(input_ids) == max_seq_length
+        assert len(input_mask) == max_seq_length
+        assert len(segment_ids) == max_seq_length
 
-    masked_lm_positions = list(instance.masked_lm_positions)
-    masked_lm_ids = tokenizer.convert_tokens_to_ids(instance.masked_lm_labels)
-    masked_lm_weights = [1.0] * len(masked_lm_ids)
+        masked_lm_positions = list(instance.masked_lm_positions)
+        masked_lm_ids = tokenizer.convert_tokens_to_ids(instance.masked_lm_labels)
+        masked_lm_weights = [1.0] * len(masked_lm_ids)
 
-    while len(masked_lm_positions) < max_predictions_per_seq:
-      masked_lm_positions.append(0)
-      masked_lm_ids.append(0)
-      masked_lm_weights.append(0.0)
+        while len(masked_lm_positions) < max_predictions_per_seq:
+            masked_lm_positions.append(0)
+            masked_lm_ids.append(0)
+            masked_lm_weights.append(0.0)
 
-    next_sentence_label = 1 if instance.is_random_next else 0
+        next_sentence_label = 1 if instance.is_random_next else 0
 
-    features = collections.OrderedDict()
-    if use_v2_feature_names:
-      features["input_word_ids"] = create_int_feature(input_ids)
-      features["input_type_ids"] = create_int_feature(segment_ids)
-    else:
-      features["input_ids"] = create_int_feature(input_ids)
-      features["segment_ids"] = create_int_feature(segment_ids)
+        features = collections.OrderedDict()
+        if use_v2_feature_names:
+            features["input_word_ids"] = create_int_feature(input_ids)
+            features["input_type_ids"] = create_int_feature(segment_ids)
+        else:
+            features["input_ids"] = create_int_feature(input_ids)
+            features["segment_ids"] = create_int_feature(segment_ids)
 
-    features["input_mask"] = create_int_feature(input_mask)
-    features["masked_lm_positions"] = create_int_feature(masked_lm_positions)
-    features["masked_lm_ids"] = create_int_feature(masked_lm_ids)
-    features["masked_lm_weights"] = create_float_feature(masked_lm_weights)
-    features["next_sentence_labels"] = create_int_feature([next_sentence_label])
+        features["input_mask"] = create_int_feature(input_mask)
+        features["masked_lm_positions"] = create_int_feature(masked_lm_positions)
+        features["masked_lm_ids"] = create_int_feature(masked_lm_ids)
+        features["masked_lm_weights"] = create_float_feature(masked_lm_weights)
+        features["next_sentence_labels"] = create_int_feature([next_sentence_label])
 
-    tf_example = tf.train.Example(features=tf.train.Features(feature=features))
+        tf_example = tf.train.Example(features=tf.train.Features(feature=features))
 
-    writers[writer_index].write(tf_example.SerializeToString())
-    writer_index = (writer_index + 1) % len(writers)
+        writers[writer_index].write(tf_example.SerializeToString())
+        writer_index = (writer_index + 1) % len(writers)
 
-    total_written += 1
+        total_written += 1
 
-    if inst_index < 20:
-      logging.info("*** Example ***")
-      logging.info("tokens: %s", " ".join(
-          [tokenization.printable_text(x) for x in instance.tokens]))
+        if inst_index < 20:
+            logging.info("*** Example ***")
+            logging.info("tokens: %s", " ".join(
+                [tokenization.printable_text(x) for x in instance.tokens]))
 
-      for feature_name in features.keys():
-        feature = features[feature_name]
-        values = []
-        if feature.int64_list.value:
-          values = feature.int64_list.value
-        elif feature.float_list.value:
-          values = feature.float_list.value
-        logging.info("%s: %s", feature_name, " ".join([str(x) for x in values]))
+            for feature_name in features.keys():
+                feature = features[feature_name]
+                values = []
+                if feature.int64_list.value:
+                    values = feature.int64_list.value
+                elif feature.float_list.value:
+                    values = feature.float_list.value
+                logging.info("%s: %s", feature_name, " ".join([str(x) for x in values]))
 
-  for writer in writers:
-    writer.close()
+    for writer in writers:
+        writer.close()
 
-  logging.info("Wrote %d total instances", total_written)
+    logging.info("Wrote %d total instances", total_written)
 
 
 def create_int_feature(values):
-  feature = tf.train.Feature(int64_list=tf.train.Int64List(value=list(values)))
-  return feature
+    feature = tf.train.Feature(int64_list=tf.train.Int64List(value=list(values)))
+    return feature
 
 
 def create_float_feature(values):
-  feature = tf.train.Feature(float_list=tf.train.FloatList(value=list(values)))
-  return feature
+    feature = tf.train.Feature(float_list=tf.train.FloatList(value=list(values)))
+    return feature
 
 
 def create_training_instances(input_files,
@@ -208,164 +207,237 @@ def create_training_instances(input_files,
                               rng,
                               do_whole_word_mask=False,
                               max_ngram_size=None):
-  """Create `TrainingInstance`s from raw text."""
-  all_documents = [[]]
+    """Create `TrainingInstance`s from raw text."""
+    all_documents = [[]]
 
-  # Input file format:
-  # (1) One sentence per line. These should ideally be actual sentences, not
-  # entire paragraphs or arbitrary spans of text. (Because we use the
-  # sentence boundaries for the "next sentence prediction" task).
-  # (2) Blank lines between documents. Document boundaries are needed so
-  # that the "next sentence prediction" task doesn't span between documents.
-  for input_file in input_files:
-    with tf.io.gfile.GFile(input_file, "rb") as reader:
-      while True:
-        line = tokenization.convert_to_unicode(reader.readline())
-        if not line:
-          break
-        line = line.strip()
+    # Input file format:
+    # (1) One sentence per line. These should ideally be actual sentences, not
+    # entire paragraphs or arbitrary spans of text. (Because we use the
+    # sentence boundaries for the "next sentence prediction" task).
+    # (2) Blank lines between documents. Document boundaries are needed so
+    # that the "next sentence prediction" task doesn't span between documents.
+    for input_file in input_files:
+        with open(input_file, "r", encoding="ISO-8859-1") as reader:
+            while True:
+                # line = tokenization.convert_to_unicode(reader.readline())
+                line = tokenization.convert_to_unicode(reader.readline())
+                if not line:
+                    break
+                line = line.strip()
 
-        # Empty lines are used as document delimiters
-        if not line:
-          all_documents.append([])
-        tokens = tokenizer.tokenize(line)
-        if tokens:
-          all_documents[-1].append(tokens)
+                # Empty lines are used as document delimiters
+                if not line:
+                    all_documents.append([])
+                tokens = tokenizer.tokenize(line)
+                if tokens:
+                    all_documents[-1].append(tokens)
 
-  # Remove empty documents
-  all_documents = [x for x in all_documents if x]
-  rng.shuffle(all_documents)
+    # Remove empty documents
+    all_documents = [x for x in all_documents if x]
+    rng.shuffle(all_documents)
 
-  vocab_words = list(tokenizer.vocab.keys())
-  instances = []
-  for _ in range(dupe_factor):
-    for document_index in range(len(all_documents)):
-      instances.extend(
-          create_instances_from_document(
-              all_documents, document_index, max_seq_length, short_seq_prob,
-              masked_lm_prob, max_predictions_per_seq, vocab_words, rng,
-              do_whole_word_mask, max_ngram_size))
+    vocab_words = list(tokenizer.vocab.keys())
+    instances = []
+    for _ in range(dupe_factor):
+        for document_index in range(len(all_documents)):
+            instances.extend(
+                create_instances_from_document_nsp(
+                    all_documents, document_index, max_seq_length, short_seq_prob,
+                    masked_lm_prob, max_predictions_per_seq, vocab_words, rng,
+                    do_whole_word_mask, max_ngram_size))
 
-  rng.shuffle(instances)
-  return instances
+    rng.shuffle(instances)
+    return instances
+
+
+def create_segments_from_document(document, max_segment_length):
+    """Split single document to segments according to max_segment_length."""
+    assert len(document) == 1
+    document = document[0]
+    document_len = len(document)
+
+    # index 是一个数组，表示每句话的索引
+    index = list(range(0, document_len, max_segment_length))
+    # other_len 表示最后剩下的文本
+    other_len = document_len % max_segment_length
+    # 如果最后剩下的文本，那么把最后一个位置的索引，添加到 index 中
+    if other_len > max_segment_length / 2:
+        index.append(document_len)
+
+    # segments 保存的是一篇文章的句子列表
+    segments = []
+    # 根据索引分割称为句子
+    for i in range(len(index) - 1):
+        segment = document[index[i]: index[i+1]]
+        segments.append(segment)
+
+    return segments
+
+
+def create_instances_from_document_nsp(
+        all_documents, document_index, max_seq_length, short_seq_prob,
+        masked_lm_prob, max_predictions_per_seq, vocab_words, rng,
+        do_whole_word_mask=False,
+        max_ngram_size=None):
+    """Creates `TrainingInstance`s for a single document. Remove NSP."""
+    # 取出 index 对应的文章
+    document = all_documents[document_index]
+
+    # 留出 2 个位置给 [CLS], [SEP]
+    # Account for [CLS], [SEP]
+    max_segment_length = max_seq_length - 2
+
+    instances = []
+    # document 是一个 list，只有一个元素，表示一篇文章
+    segments = create_segments_from_document(document, max_segment_length)
+    for j, segment in enumerate(segments):
+        is_random_next = False
+        # tokens 是添加了 [CLS] 和 [SEP] 的句子
+        tokens = []
+        # 表示句子的 id，都是 0，表示只有 1 个句子
+        segment_ids = []
+        # 在开头添加 [CLS]
+        tokens.append("[CLS]")
+        segment_ids.append(0)
+        for token in segment:
+            tokens.append(token)
+            segment_ids.append(0)
+        # 在开头添加 [SEP]
+        tokens.append("[SEP]")
+        # 添加句子 id:0
+        segment_ids.append(0)
+        # 对一个句子进行 mask ，获得 mask 后的 tokens，mask 的位置以及真实的 token(label)
+        (tokens, masked_lm_positions,
+         masked_lm_labels) = create_masked_lm_predictions(
+            tokens, masked_lm_prob, max_predictions_per_seq, vocab_words, rng)
+        # TrainingInstance 表示一个句子的内容
+        instance = TrainingInstance(
+            tokens=tokens, # 经过 mask 的 token 列表
+            segment_ids=segment_ids, # 句子 id
+            is_random_next=is_random_next, # False
+            masked_lm_positions=masked_lm_positions, # mask 的位置列表
+            masked_lm_labels=masked_lm_labels) # mask 的真实 token
+        instances.append(instance)
+
+    return instances
 
 
 def create_instances_from_document(
-    all_documents, document_index, max_seq_length, short_seq_prob,
-    masked_lm_prob, max_predictions_per_seq, vocab_words, rng,
-    do_whole_word_mask=False,
-    max_ngram_size=None):
-  """Creates `TrainingInstance`s for a single document."""
-  document = all_documents[document_index]
+        all_documents, document_index, max_seq_length, short_seq_prob,
+        masked_lm_prob, max_predictions_per_seq, vocab_words, rng,
+        do_whole_word_mask=False,
+        max_ngram_size=None):
+    """Creates `TrainingInstance`s for a single document."""
+    document = all_documents[document_index]
 
-  # Account for [CLS], [SEP], [SEP]
-  max_num_tokens = max_seq_length - 3
+    # Account for [CLS], [SEP], [SEP]
+    max_num_tokens = max_seq_length - 3
 
-  # We *usually* want to fill up the entire sequence since we are padding
-  # to `max_seq_length` anyways, so short sequences are generally wasted
-  # computation. However, we *sometimes*
-  # (i.e., short_seq_prob == 0.1 == 10% of the time) want to use shorter
-  # sequences to minimize the mismatch between pre-training and fine-tuning.
-  # The `target_seq_length` is just a rough target however, whereas
-  # `max_seq_length` is a hard limit.
-  target_seq_length = max_num_tokens
-  if rng.random() < short_seq_prob:
-    target_seq_length = rng.randint(2, max_num_tokens)
+    # We *usually* want to fill up the entire sequence since we are padding
+    # to `max_seq_length` anyways, so short sequences are generally wasted
+    # computation. However, we *sometimes*
+    # (i.e., short_seq_prob == 0.1 == 10% of the time) want to use shorter
+    # sequences to minimize the mismatch between pre-training and fine-tuning.
+    # The `target_seq_length` is just a rough target however, whereas
+    # `max_seq_length` is a hard limit.
+    target_seq_length = max_num_tokens
+    if rng.random() < short_seq_prob:
+        target_seq_length = rng.randint(2, max_num_tokens)
 
-  # We DON'T just concatenate all of the tokens from a document into a long
-  # sequence and choose an arbitrary split point because this would make the
-  # next sentence prediction task too easy. Instead, we split the input into
-  # segments "A" and "B" based on the actual "sentences" provided by the user
-  # input.
-  instances = []
-  current_chunk = []
-  current_length = 0
-  i = 0
-  while i < len(document):
-    segment = document[i]
-    current_chunk.append(segment)
-    current_length += len(segment)
-    if i == len(document) - 1 or current_length >= target_seq_length:
-      if current_chunk:
-        # `a_end` is how many segments from `current_chunk` go into the `A`
-        # (first) sentence.
-        a_end = 1
-        if len(current_chunk) >= 2:
-          a_end = rng.randint(1, len(current_chunk) - 1)
+    # We DON'T just concatenate all of the tokens from a document into a long
+    # sequence and choose an arbitrary split point because this would make the
+    # next sentence prediction task too easy. Instead, we split the input into
+    # segments "A" and "B" based on the actual "sentences" provided by the user
+    # input.
+    instances = []
+    current_chunk = []
+    current_length = 0
+    i = 0
+    while i < len(document):
+        segment = document[i]
+        current_chunk.append(segment)
+        current_length += len(segment)
+        if i == len(document) - 1 or current_length >= target_seq_length:
+            if current_chunk:
+                # `a_end` is how many segments from `current_chunk` go into the `A`
+                # (first) sentence.
+                a_end = 1
+                if len(current_chunk) >= 2:
+                    a_end = rng.randint(1, len(current_chunk) - 1)
 
-        tokens_a = []
-        for j in range(a_end):
-          tokens_a.extend(current_chunk[j])
+                tokens_a = []
+                for j in range(a_end):
+                    tokens_a.extend(current_chunk[j])
 
-        tokens_b = []
-        # Random next
-        is_random_next = False
-        if len(current_chunk) == 1 or rng.random() < 0.5:
-          is_random_next = True
-          target_b_length = target_seq_length - len(tokens_a)
+                tokens_b = []
+                # Random next
+                is_random_next = False
+                if len(current_chunk) == 1 or rng.random() < 0.5:
+                    is_random_next = True
+                    target_b_length = target_seq_length - len(tokens_a)
 
-          # This should rarely go for more than one iteration for large
-          # corpora. However, just to be careful, we try to make sure that
-          # the random document is not the same as the document
-          # we're processing.
-          for _ in range(10):
-            random_document_index = rng.randint(0, len(all_documents) - 1)
-            if random_document_index != document_index:
-              break
+                    # This should rarely go for more than one iteration for large
+                    # corpora. However, just to be careful, we try to make sure that
+                    # the random document is not the same as the document
+                    # we're processing.
+                    for _ in range(10):
+                        random_document_index = rng.randint(0, len(all_documents) - 1)
+                        if random_document_index != document_index:
+                            break
 
-          random_document = all_documents[random_document_index]
-          random_start = rng.randint(0, len(random_document) - 1)
-          for j in range(random_start, len(random_document)):
-            tokens_b.extend(random_document[j])
-            if len(tokens_b) >= target_b_length:
-              break
-          # We didn't actually use these segments so we "put them back" so
-          # they don't go to waste.
-          num_unused_segments = len(current_chunk) - a_end
-          i -= num_unused_segments
-        # Actual next
-        else:
-          is_random_next = False
-          for j in range(a_end, len(current_chunk)):
-            tokens_b.extend(current_chunk[j])
-        truncate_seq_pair(tokens_a, tokens_b, max_num_tokens, rng)
+                    random_document = all_documents[random_document_index]
+                    random_start = rng.randint(0, len(random_document) - 1)
+                    for j in range(random_start, len(random_document)):
+                        tokens_b.extend(random_document[j])
+                        if len(tokens_b) >= target_b_length:
+                            break
+                    # We didn't actually use these segments so we "put them back" so
+                    # they don't go to waste.
+                    num_unused_segments = len(current_chunk) - a_end
+                    i -= num_unused_segments
+                # Actual next
+                else:
+                    is_random_next = False
+                    for j in range(a_end, len(current_chunk)):
+                        tokens_b.extend(current_chunk[j])
+                truncate_seq_pair(tokens_a, tokens_b, max_num_tokens, rng)
 
-        assert len(tokens_a) >= 1
-        assert len(tokens_b) >= 1
+                assert len(tokens_a) >= 1
+                assert len(tokens_b) >= 1
 
-        tokens = []
-        segment_ids = []
-        tokens.append("[CLS]")
-        segment_ids.append(0)
-        for token in tokens_a:
-          tokens.append(token)
-          segment_ids.append(0)
+                tokens = []
+                segment_ids = []
+                tokens.append("[CLS]")
+                segment_ids.append(0)
+                for token in tokens_a:
+                    tokens.append(token)
+                    segment_ids.append(0)
 
-        tokens.append("[SEP]")
-        segment_ids.append(0)
+                tokens.append("[SEP]")
+                segment_ids.append(0)
 
-        for token in tokens_b:
-          tokens.append(token)
-          segment_ids.append(1)
-        tokens.append("[SEP]")
-        segment_ids.append(1)
+                for token in tokens_b:
+                    tokens.append(token)
+                    segment_ids.append(1)
+                tokens.append("[SEP]")
+                segment_ids.append(1)
 
-        (tokens, masked_lm_positions,
-         masked_lm_labels) = create_masked_lm_predictions(
-             tokens, masked_lm_prob, max_predictions_per_seq, vocab_words, rng,
-             do_whole_word_mask, max_ngram_size)
-        instance = TrainingInstance(
-            tokens=tokens,
-            segment_ids=segment_ids,
-            is_random_next=is_random_next,
-            masked_lm_positions=masked_lm_positions,
-            masked_lm_labels=masked_lm_labels)
-        instances.append(instance)
-      current_chunk = []
-      current_length = 0
-    i += 1
+                (tokens, masked_lm_positions,
+                 masked_lm_labels) = create_masked_lm_predictions(
+                    tokens, masked_lm_prob, max_predictions_per_seq, vocab_words, rng,
+                    do_whole_word_mask, max_ngram_size)
+                instance = TrainingInstance(
+                    tokens=tokens,
+                    segment_ids=segment_ids,
+                    is_random_next=is_random_next,
+                    masked_lm_positions=masked_lm_positions,
+                    masked_lm_labels=masked_lm_labels)
+                instances.append(instance)
+            current_chunk = []
+            current_length = 0
+        i += 1
 
-  return instances
+    return instances
 
 
 MaskedLmInstance = collections.namedtuple("MaskedLmInstance",
@@ -380,290 +452,334 @@ _Gram = collections.namedtuple("_Gram", ["begin", "end"])
 
 
 def _window(iterable, size):
-  """Helper to create a sliding window iterator with a given size.
+    """Helper to create a sliding window iterator with a given size.
 
-  E.g.,
-    input = [1, 2, 3, 4]
-    _window(input, 1) => [1], [2], [3], [4]
-    _window(input, 2) => [1, 2], [2, 3], [3, 4]
-    _window(input, 3) => [1, 2, 3], [2, 3, 4]
-    _window(input, 4) => [1, 2, 3, 4]
-    _window(input, 5) => None
+    E.g.,
+      input = [1, 2, 3, 4]
+      _window(input, 1) => [1], [2], [3], [4]
+      _window(input, 2) => [1, 2], [2, 3], [3, 4]
+      _window(input, 3) => [1, 2, 3], [2, 3, 4]
+      _window(input, 4) => [1, 2, 3, 4]
+      _window(input, 5) => None
 
-  Args:
-    iterable: elements to iterate over.
-    size: size of the window.
+    Args:
+      iterable: elements to iterate over.
+      size: size of the window.
 
-  Yields:
-    Elements of `iterable` batched into a sliding window of length `size`.
-  """
-  i = iter(iterable)
-  window = []
-  try:
-    for e in range(0, size):
-      window.append(next(i))
-    yield window
-  except StopIteration:
-    # handle the case where iterable's length is less than the window size.
-    return
-  for e in i:
-    window = window[1:] + [e]
-    yield window
+    Yields:
+      Elements of `iterable` batched into a sliding window of length `size`.
+    """
+    i = iter(iterable)
+    window = []
+    try:
+        for e in range(0, size):
+            window.append(next(i))
+        yield window
+    except StopIteration:
+        # handle the case where iterable's length is less than the window size.
+        return
+    for e in i:
+        window = window[1:] + [e]
+        yield window
 
 
 def _contiguous(sorted_grams):
-  """Test whether a sequence of grams is contiguous.
+    """Test whether a sequence of grams is contiguous.
 
-  Args:
-    sorted_grams: _Grams which are sorted in increasing order.
-  Returns:
-    True if `sorted_grams` are touching each other.
+    Args:
+      sorted_grams: _Grams which are sorted in increasing order.
+    Returns:
+      True if `sorted_grams` are touching each other.
 
-  E.g.,
-    _contiguous([(1, 4), (4, 5), (5, 10)]) == True
-    _contiguous([(1, 2), (4, 5)]) == False
-  """
-  for a, b in _window(sorted_grams, 2):
-    if a.end != b.begin:
-      return False
-  return True
+    E.g.,
+      _contiguous([(1, 4), (4, 5), (5, 10)]) == True
+      _contiguous([(1, 2), (4, 5)]) == False
+    """
+    for a, b in _window(sorted_grams, 2):
+        if a.end != b.begin:
+            return False
+    return True
 
 
 def _masking_ngrams(grams, max_ngram_size, max_masked_tokens, rng):
-  """Create a list of masking {1, ..., n}-grams from a list of one-grams.
+    """Create a list of masking {1, ..., n}-grams from a list of one-grams.
 
-  This is an extention of 'whole word masking' to mask multiple, contiguous
-  words such as (e.g., "the red boat").
+    This is an extention of 'whole word masking' to mask multiple, contiguous
+    words such as (e.g., "the red boat").
 
-  Each input gram represents the token indices of a single word,
-     words:  ["the", "red", "boat"]
-     tokens: ["the", "red", "boa", "##t"]
-     grams:  [(0,1), (1,2), (2,4)]
+    Each input gram represents the token indices of a single word,
+       words:  ["the", "red", "boat"]
+       tokens: ["the", "red", "boa", "##t"]
+       grams:  [(0,1), (1,2), (2,4)]
 
-  For a `max_ngram_size` of three, possible outputs masks include:
-    1-grams: (0,1), (1,2), (2,4)
-    2-grams: (0,2), (1,4)
-    3-grams; (0,4)
+    For a `max_ngram_size` of three, possible outputs masks include:
+      1-grams: (0,1), (1,2), (2,4)
+      2-grams: (0,2), (1,4)
+      3-grams; (0,4)
 
-  Output masks will not overlap and contain less than `max_masked_tokens` total
-  tokens.  E.g., for the example above with `max_masked_tokens` as three,
-  valid outputs are,
-       [(0,1), (1,2)]  # "the", "red" covering two tokens
-       [(1,2), (2,4)]  # "red", "boa", "##t" covering three tokens
+    Output masks will not overlap and contain less than `max_masked_tokens` total
+    tokens.  E.g., for the example above with `max_masked_tokens` as three,
+    valid outputs are,
+         [(0,1), (1,2)]  # "the", "red" covering two tokens
+         [(1,2), (2,4)]  # "red", "boa", "##t" covering three tokens
 
-  The length of the selected n-gram follows a zipf weighting to
-  favor shorter n-gram sizes (weight(1)=1, weight(2)=1/2, weight(3)=1/3, ...).
+    The length of the selected n-gram follows a zipf weighting to
+    favor shorter n-gram sizes (weight(1)=1, weight(2)=1/2, weight(3)=1/3, ...).
 
-  Args:
-    grams: List of one-grams.
-    max_ngram_size: Maximum number of contiguous one-grams combined to create
-      an n-gram.
-    max_masked_tokens: Maximum total number of tokens to be masked.
-    rng: `random.Random` generator.
+    Args:
+      grams: List of one-grams.
+      max_ngram_size: Maximum number of contiguous one-grams combined to create
+        an n-gram.
+      max_masked_tokens: Maximum total number of tokens to be masked.
+      rng: `random.Random` generator.
 
-  Returns:
-    A list of n-grams to be used as masks.
-  """
-  if not grams:
-    return None
+    Returns:
+      A list of n-grams to be used as masks.
+    """
+    if not grams:
+        return None
 
-  grams = sorted(grams)
-  num_tokens = grams[-1].end
+    grams = sorted(grams)
+    num_tokens = grams[-1].end
 
-  # Ensure our grams are valid (i.e., they don't overlap).
-  for a, b in _window(grams, 2):
-    if a.end > b.begin:
-      raise ValueError("overlapping grams: {}".format(grams))
+    # Ensure our grams are valid (i.e., they don't overlap).
+    for a, b in _window(grams, 2):
+        if a.end > b.begin:
+            raise ValueError("overlapping grams: {}".format(grams))
 
-  # Build map from n-gram length to list of n-grams.
-  ngrams = {i: [] for i in range(1, max_ngram_size+1)}
-  for gram_size in range(1, max_ngram_size+1):
-    for g in _window(grams, gram_size):
-      if _contiguous(g):
-        # Add an n-gram which spans these one-grams.
-        ngrams[gram_size].append(_Gram(g[0].begin, g[-1].end))
+    # Build map from n-gram length to list of n-grams.
+    ngrams = {i: [] for i in range(1, max_ngram_size + 1)}
+    for gram_size in range(1, max_ngram_size + 1):
+        for g in _window(grams, gram_size):
+            if _contiguous(g):
+                # Add an n-gram which spans these one-grams.
+                ngrams[gram_size].append(_Gram(g[0].begin, g[-1].end))
 
-  # Shuffle each list of n-grams.
-  for v in ngrams.values():
-    rng.shuffle(v)
+    # Shuffle each list of n-grams.
+    for v in ngrams.values():
+        rng.shuffle(v)
 
-  # Create the weighting for n-gram length selection.
-  # Stored cummulatively for `random.choices` below.
-  cummulative_weights = list(
-      itertools.accumulate([1./n for n in range(1, max_ngram_size+1)]))
+    # Create the weighting for n-gram length selection.
+    # Stored cummulatively for `random.choices` below.
+    cummulative_weights = list(
+        itertools.accumulate([1. / n for n in range(1, max_ngram_size + 1)]))
 
-  output_ngrams = []
-  # Keep a bitmask of which tokens have been masked.
-  masked_tokens = [False] * num_tokens
-  # Loop until we have enough masked tokens or there are no more candidate
-  # n-grams of any length.
-  # Each code path should ensure one or more elements from `ngrams` are removed
-  # to guarentee this loop terminates.
-  while (sum(masked_tokens) < max_masked_tokens and
-         sum(len(s) for s in ngrams.values())):
-    # Pick an n-gram size based on our weights.
-    sz = random.choices(range(1, max_ngram_size+1),
-                        cum_weights=cummulative_weights)[0]
+    output_ngrams = []
+    # Keep a bitmask of which tokens have been masked.
+    masked_tokens = [False] * num_tokens
+    # Loop until we have enough masked tokens or there are no more candidate
+    # n-grams of any length.
+    # Each code path should ensure one or more elements from `ngrams` are removed
+    # to guarentee this loop terminates.
+    while (sum(masked_tokens) < max_masked_tokens and
+           sum(len(s) for s in ngrams.values())):
+        # Pick an n-gram size based on our weights.
+        sz = random.choices(range(1, max_ngram_size + 1),
+                            cum_weights=cummulative_weights)[0]
 
-    # Ensure this size doesn't result in too many masked tokens.
-    # E.g., a two-gram contains _at least_ two tokens.
-    if sum(masked_tokens) + sz > max_masked_tokens:
-      # All n-grams of this length are too long and can be removed from
-      # consideration.
-      ngrams[sz].clear()
-      continue
+        # Ensure this size doesn't result in too many masked tokens.
+        # E.g., a two-gram contains _at least_ two tokens.
+        if sum(masked_tokens) + sz > max_masked_tokens:
+            # All n-grams of this length are too long and can be removed from
+            # consideration.
+            ngrams[sz].clear()
+            continue
 
-    # All of the n-grams of this size have been used.
-    if not ngrams[sz]:
-      continue
+        # All of the n-grams of this size have been used.
+        if not ngrams[sz]:
+            continue
 
-    # Choose a random n-gram of the given size.
-    gram = ngrams[sz].pop()
-    num_gram_tokens = gram.end-gram.begin
+        # Choose a random n-gram of the given size.
+        gram = ngrams[sz].pop()
+        num_gram_tokens = gram.end - gram.begin
 
-    # Check if this would add too many tokens.
-    if num_gram_tokens + sum(masked_tokens) > max_masked_tokens:
-      continue
+        # Check if this would add too many tokens.
+        if num_gram_tokens + sum(masked_tokens) > max_masked_tokens:
+            continue
 
-    # Check if any of the tokens in this gram have already been masked.
-    if sum(masked_tokens[gram.begin:gram.end]):
-      continue
+        # Check if any of the tokens in this gram have already been masked.
+        if sum(masked_tokens[gram.begin:gram.end]):
+            continue
 
-    # Found a usable n-gram!  Mark its tokens as masked and add it to return.
-    masked_tokens[gram.begin:gram.end] = [True] * (gram.end-gram.begin)
-    output_ngrams.append(gram)
-  return output_ngrams
+        # Found a usable n-gram!  Mark its tokens as masked and add it to return.
+        masked_tokens[gram.begin:gram.end] = [True] * (gram.end - gram.begin)
+        output_ngrams.append(gram)
+    return output_ngrams
 
 
 def _wordpieces_to_grams(tokens):
-  """Reconstitue grams (words) from `tokens`.
+    """Reconstitue grams (words) from `tokens`.
 
-  E.g.,
-     tokens: ['[CLS]', 'That', 'lit', '##tle', 'blue', 'tru', '##ck', '[SEP]']
-      grams: [          [1,2), [2,         4),  [4,5) , [5,       6)]
+    E.g.,
+       tokens: ['[CLS]', 'That', 'lit', '##tle', 'blue', 'tru', '##ck', '[SEP]']
+        grams: [          [1,2), [2,         4),  [4,5) , [5,       6)]
 
-  Args:
-    tokens: list of wordpieces
-  Returns:
-    List of _Grams representing spans of whole words
-    (without "[CLS]" and "[SEP]").
-  """
-  grams = []
-  gram_start_pos = None
-  for i, token in enumerate(tokens):
-    if gram_start_pos is not None and token.startswith("##"):
-      continue
+    Args:
+      tokens: list of wordpieces
+    Returns:
+      List of _Grams representing spans of whole words
+      (without "[CLS]" and "[SEP]").
+    """
+    grams = []
+    gram_start_pos = None
+    for i, token in enumerate(tokens):
+        if gram_start_pos is not None and token.startswith("##"):
+            continue
+        if gram_start_pos is not None:
+            grams.append(_Gram(gram_start_pos, i))
+        if token not in ["[CLS]", "[SEP]"]:
+            gram_start_pos = i
+        else:
+            gram_start_pos = None
     if gram_start_pos is not None:
-      grams.append(_Gram(gram_start_pos, i))
-    if token not in ["[CLS]", "[SEP]"]:
-      gram_start_pos = i
-    else:
-      gram_start_pos = None
-  if gram_start_pos is not None:
-    grams.append(_Gram(gram_start_pos, len(tokens)))
-  return grams
+        grams.append(_Gram(gram_start_pos, len(tokens)))
+    return grams
 
 
 def create_masked_lm_predictions(tokens, masked_lm_prob,
                                  max_predictions_per_seq, vocab_words, rng,
                                  do_whole_word_mask,
                                  max_ngram_size=None):
-  """Creates the predictions for the masked LM objective."""
-  if do_whole_word_mask:
-    grams = _wordpieces_to_grams(tokens)
-  else:
-    # Here we consider each token to be a word to allow for sub-word masking.
-    if max_ngram_size:
-      raise ValueError("cannot use ngram masking without whole word masking")
-    grams = [_Gram(i, i+1) for i in range(0, len(tokens))
-             if tokens[i] not in ["[CLS]", "[SEP]"]]
+    """Creates the predictions for the masked LM objective."""
+    cand_indexes = []
+    for (i, token) in enumerate(tokens):
+        if token == "[CLS]" or token == "[SEP]":
+            continue
+        # Whole Word Masking means that if we mask all of the wordpieces
+        # corresponding to an original word. When a word has been split into
+        # WordPieces, the first token does not have any marker and any subsequence
+        # tokens are prefixed with ##. So whenever we see the ## token, we
+        # append it to the previous set of word indexes.
+        #
+        # Note that Whole Word Masking does *not* change the training code
+        # at all -- we still predict each WordPiece independently, softmaxed
+        # over the entire vocabulary.
+        # token.startswith("##") 是应对 word piece tokenization
+        # 如果一个 token 以 ## 开头，那么表示 这个 token 是属于和前一个 token 是同一个单词里的
+        # 需要添加到前一个 token 对应 list
+        if (FLAGS.do_whole_word_mask and len(cand_indexes) >= 1 and
+                token.startswith("##")):
+            cand_indexes[-1].append(i)
+        # 由于我们使用的 word tokenization，因此只会执行这个 else 的语句
+        else: # 只会执行这个条件，添加的是一个 list，里面只有一个元素
+            cand_indexes.append([i])
 
-  num_to_predict = min(max_predictions_per_seq,
-                       max(1, int(round(len(tokens) * masked_lm_prob))))
-  # Generate masks.  If `max_ngram_size` in [0, None] it means we're doing
-  # whole word masking or token level masking.  Both of these can be treated
-  # as the `max_ngram_size=1` case.
-  masked_grams = _masking_ngrams(grams, max_ngram_size or 1,
-                                 num_to_predict, rng)
-  masked_lms = []
-  output_tokens = list(tokens)
-  for gram in masked_grams:
-    # 80% of the time, replace all n-gram tokens with [MASK]
-    if rng.random() < 0.8:
-      replacement_action = lambda idx: "[MASK]"
-    else:
-      # 10% of the time, keep all the original n-gram tokens.
-      if rng.random() < 0.5:
-        replacement_action = lambda idx: tokens[idx]
-      # 10% of the time, replace each n-gram token with a random word.
-      else:
-        replacement_action = lambda idx: rng.choice(vocab_words)
+    rng.shuffle(cand_indexes)
 
-    for idx in range(gram.begin, gram.end):
-      output_tokens[idx] = replacement_action(idx)
-      masked_lms.append(MaskedLmInstance(index=idx, label=tokens[idx]))
+    output_tokens = list(tokens)
+    # 计算实际上 mask 的数量
+    # 取 max_predictions_per_seq  和(句子长度 * masked_lm_prob) 的较小值。
+    num_to_predict = min(max_predictions_per_seq,
+                         max(1, int(round(len(tokens) * masked_lm_prob))))
 
-  assert len(masked_lms) <= num_to_predict
-  masked_lms = sorted(masked_lms, key=lambda x: x.index)
+    masked_lms = []
+    covered_indexes = set()
+    for index_set in cand_indexes:
+        # 如果 mask 的数量大于 num_to_predict，就停止
+        if len(masked_lms) >= num_to_predict:
+            break
+        # If adding a whole-word mask would exceed the maximum number of
+        # predictions, then just skip this candidate.
+        # index_set 是一个 list，里面只有一个元素
+        if len(masked_lms) + len(index_set) > num_to_predict:
+            continue
+        is_any_index_covered = False
+        for index in index_set:
+            if index in covered_indexes:
+                is_any_index_covered = True
+                break
+        # 如果已经包含了这些 index，那么就跳过
+        if is_any_index_covered:
+            continue
 
-  masked_lm_positions = []
-  masked_lm_labels = []
-  for p in masked_lms:
-    masked_lm_positions.append(p.index)
-    masked_lm_labels.append(p.label)
+        for index in index_set:
+            # covered_indexes 是一个 set
+            covered_indexes.add(index)
 
-  return (output_tokens, masked_lm_positions, masked_lm_labels)
+            masked_token = None
+            # 80% of the time, replace with [MASK]
+            # 80% 的概率替换为 mask
+            if rng.random() < 0.8:
+                masked_token = "[MASK]"
+            else:
+                # 剩下的 20%，再分为两半
+                # 10% of the time, keep original
+                # 20% *0.5 =10% 的概率保留原来的 token
+                if rng.random() < 0.5:
+                    masked_token = tokens[index]
+                # 10% of the time, replace with random word
+                else:
+                    # 20% *0.5 =10% 的概率替换为随机的一个 token
+                    masked_token = vocab_words[rng.randint(0, len(vocab_words) - 1)]
+
+            output_tokens[index] = masked_token
+
+            masked_lms.append(MaskedLmInstance(index=index, label=tokens[index]))
+    # 执行完循环后，mask 的数量小于 num_to_predict
+    assert len(masked_lms) <= num_to_predict
+    # 根据 index 排序
+    masked_lms = sorted(masked_lms, key=lambda x: x.index)
+
+    # masked_lm_positions 保存 mask 的位置
+    masked_lm_positions = []
+    # masked_lm_labels 保存 mask 的真实 token
+    masked_lm_labels = []
+    for p in masked_lms:
+        masked_lm_positions.append(p.index)
+        masked_lm_labels.append(p.label)
+
+    return (output_tokens, masked_lm_positions, masked_lm_labels)
 
 
 def truncate_seq_pair(tokens_a, tokens_b, max_num_tokens, rng):
-  """Truncates a pair of sequences to a maximum sequence length."""
-  while True:
-    total_length = len(tokens_a) + len(tokens_b)
-    if total_length <= max_num_tokens:
-      break
+    """Truncates a pair of sequences to a maximum sequence length."""
+    while True:
+        total_length = len(tokens_a) + len(tokens_b)
+        if total_length <= max_num_tokens:
+            break
 
-    trunc_tokens = tokens_a if len(tokens_a) > len(tokens_b) else tokens_b
-    assert len(trunc_tokens) >= 1
+        trunc_tokens = tokens_a if len(tokens_a) > len(tokens_b) else tokens_b
+        assert len(trunc_tokens) >= 1
 
-    # We want to sometimes truncate from the front and sometimes from the
-    # back to add more randomness and avoid biases.
-    if rng.random() < 0.5:
-      del trunc_tokens[0]
-    else:
-      trunc_tokens.pop()
+        # We want to sometimes truncate from the front and sometimes from the
+        # back to add more randomness and avoid biases.
+        if rng.random() < 0.5:
+            del trunc_tokens[0]
+        else:
+            trunc_tokens.pop()
 
 
 def main(_):
-  tokenizer = tokenization.FullTokenizer(
-      vocab_file=FLAGS.vocab_file, do_lower_case=FLAGS.do_lower_case)
+    tokenizer = tokenization.FullTokenizer(
+        vocab_file=FLAGS.vocab_file, do_lower_case=FLAGS.do_lower_case)
 
-  input_files = []
-  for input_pattern in FLAGS.input_file.split(","):
-    input_files.extend(tf.io.gfile.glob(input_pattern))
+    input_files = [FLAGS.input_file]
+    # for input_pattern in FLAGS.input_file.split(","):
+    #   input_files.extend(input_pattern)
+    #
+    # logging.info("*** Reading from input files ***")
+    for input_file in input_files:
+        logging.info("  %s", input_file)
 
-  logging.info("*** Reading from input files ***")
-  for input_file in input_files:
-    logging.info("  %s", input_file)
+    rng = random.Random(FLAGS.random_seed)
+    instances = create_training_instances(
+        input_files, tokenizer, FLAGS.max_seq_length, FLAGS.dupe_factor,
+        FLAGS.short_seq_prob, FLAGS.masked_lm_prob, FLAGS.max_predictions_per_seq,
+        rng, FLAGS.do_whole_word_mask, FLAGS.max_ngram_size)
 
-  rng = random.Random(FLAGS.random_seed)
-  instances = create_training_instances(
-      input_files, tokenizer, FLAGS.max_seq_length, FLAGS.dupe_factor,
-      FLAGS.short_seq_prob, FLAGS.masked_lm_prob, FLAGS.max_predictions_per_seq,
-      rng, FLAGS.do_whole_word_mask, FLAGS.max_ngram_size)
+    output_files = FLAGS.output_file.split(",")
+    logging.info("*** Writing to output files ***")
+    for output_file in output_files:
+        logging.info("  %s", output_file)
 
-  output_files = FLAGS.output_file.split(",")
-  logging.info("*** Writing to output files ***")
-  for output_file in output_files:
-    logging.info("  %s", output_file)
-
-  write_instance_to_example_files(instances, tokenizer, FLAGS.max_seq_length,
-                                  FLAGS.max_predictions_per_seq, output_files,
-                                  FLAGS.gzip_compress,
-                                  FLAGS.use_v2_feature_names)
+    write_instance_to_example_files(instances, tokenizer, FLAGS.max_seq_length,
+                                    FLAGS.max_predictions_per_seq, output_files,
+                                    FLAGS.gzip_compress,
+                                    FLAGS.use_v2_feature_names)
 
 
 if __name__ == "__main__":
-  flags.mark_flag_as_required("input_file")
-  flags.mark_flag_as_required("output_file")
-  flags.mark_flag_as_required("vocab_file")
-  app.run(main)
+    flags.mark_flag_as_required("input_file")
+    flags.mark_flag_as_required("output_file")
+    flags.mark_flag_as_required("vocab_file")
+    app.run(main)

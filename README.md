@@ -1,5 +1,5 @@
 # bert
-pretrain a bert_mini
+记录 [天池学习赛](https://tianchi.aliyun.com/competition/entrance/531810/introduction) 使用 bert 进行预训练的过程
 
 ## 第一步
 生成单词文件和
